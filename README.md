@@ -1,57 +1,129 @@
-# beta-arrestin-pip2-contact-analysis
 # β-Arrestin–PIP2 Contact Analysis
 
-Python scripts for residue-level β-arrestin–PIP2 contact analysis using **coarse-grained molecular dynamics trajectories**.
+## Overview
 
-The repository contains separate analysis scripts for β-arr1 (ARR2) and β-arr2 (ARR3).
+This repository contains Python scripts for residue-level analysis of β-arrestin–PIP2 contacts from **coarse-grained molecular dynamics (CG-MD) trajectories**.
 
-## Scripts
+Separate scripts are provided for:
 
-- `arr2_residue_pip2_contact_analysis.py`
-  - β-arr1
-  - Residues 1–418
+- **β-arr1 (ARR2):** residues 1–418
+- **β-arr2 (ARR3):** residues 1–409
 
-- `arr3_residue_pip2_contact_analysis.py`
-  - β-arr2
-  - Residues 1–409
+The analysis calculates the mean number of PIP2 contacts for each protein residue across the trajectory and generates both numerical contact data and a PDB file for visualization in VMD.
 
-## Analysis Overview
+## Method
 
-These scripts calculate residue-level contacts between β-arrestin and PIP2 from coarse-grained molecular dynamics simulations.
-
-For each trajectory frame, every protein residue is compared with all PIP2 beads.
+For each trajectory frame, the coarse-grained beads of each β-arrestin residue are compared with all PIP2 beads.
 
 A contact is defined when a protein bead and a PIP2 bead are within:
 
-`0.6 nm (6 Å)`
+**0.6 nm (6 Å)**
 
-The number of protein–PIP2 bead pairs within the cutoff is counted for each residue in each frame.
+The number of bead–bead pairs satisfying this distance criterion is counted for each residue in every frame. These contact counts are then averaged over all analyzed trajectory frames to obtain the mean PIP2 contact value for each residue.
 
-The mean contact value for residue `i` is calculated as:
+Because the analysis is performed on **coarse-grained trajectories**, the calculated contacts represent **bead–bead contacts rather than atom–atom contacts**.
 
-Mean contact(i) = total number of residue–PIP2 contacts / number of trajectory frames
-
-The resulting mean contact values are then normalized between 0 and 1 using min-max normalization:
-
-Normalized contact(i) = (x_i - x_min) / (x_max - x_min)
-
-where:
-
-- `x_i` is the mean PIP2 contact value of residue `i`
-- `x_min` is the minimum mean contact value among all analyzed residues
-- `x_max` is the maximum mean contact value among all analyzed residues
-
-## Coarse-Grained Representation
-
-The analysis is designed for **coarse-grained molecular dynamics trajectories**.
-
-Therefore, the calculated contacts correspond to interactions between coarse-grained beads rather than individual atoms.
-
-In the systems used for this analysis, PIP2 is represented with the residue name:
-
-`POP6`
-
-The corresponding MDAnalysis selection is:
+In the systems used here, PIP2 is represented by the residue name `POP6`:
 
 ```python
 lipid_selection = "resname POP6"
+```
+
+If a different residue name is used for PIP2 in another coarse-grained system, this selection should be modified accordingly.
+
+## Normalization
+
+The mean PIP2 contact values are normalized between 0 and 1 using min-max normalization:
+
+```text
+Normalized contact(i) = (x(i) - x(min)) / (x(max) - x(min))
+```
+
+where `x(i)` is the mean PIP2 contact value of residue `i`, and `x(min)` and `x(max)` are the minimum and maximum mean contact values among the analyzed protein residues.
+
+Therefore:
+
+- **0.0** = lowest relative PIP2 contact
+- **1.0** = highest relative PIP2 contact
+
+The normalized values represent relative PIP2 contact levels within each analyzed system.
+
+## Input
+
+The scripts require a structure/topology file and a coarse-grained molecular dynamics trajectory.
+
+For example:
+
+```python
+topology_file = "structure.pdb"
+trajectory_file = "trajectory.pdb"
+```
+
+Trajectory formats supported by MDAnalysis, such as multi-model PDB, TRR, or XTC, can be used provided that the topology and trajectory are compatible.
+
+## Output
+
+Each script generates two main output files.
+
+### CSV Contact Data
+
+The CSV file contains the residue-level contact results:
+
+- `Resid` — residue number
+- `Resname` — residue name
+- `Mean_bead_contacts_with_PIP2` — mean number of coarse-grained bead–bead contacts with PIP2 across the trajectory
+- `Normalized_contact_0_1` — min-max normalized contact score
+- `Frame_count` — number of analyzed trajectory frames
+
+### PDB Contact Map
+
+A PDB file is also generated for visualization of the residue-level PIP2 contact distribution on the β-arrestin structure.
+
+The normalized contact score of each residue is written into the **B-factor (Beta) field** of the corresponding PDB records:
+
+```text
+B-factor field = normalized PIP2 contact score
+```
+
+All beads belonging to the same protein residue receive the same normalized value.
+
+The values stored in this field range from **0.00 to 1.00** and are used only for visualization. They do **not** represent experimental crystallographic B-factors.
+
+## VMD Visualization
+
+The generated PDB contact map can be loaded directly into VMD.
+
+In:
+
+```text
+Graphics → Representations
+```
+
+use:
+
+```text
+Selected Atoms:  protein
+Drawing Method:  NewCartoon
+Coloring Method: Beta
+```
+
+VMD will color the β-arrestin structure according to the normalized PIP2 contact score stored in the B-factor field.
+
+Residues with values closer to **1.0** have higher relative PIP2 contact levels, whereas residues with values closer to **0.0** have lower relative PIP2 contact levels.
+
+This provides a three-dimensional residue-level map of PIP2-contacting regions on β-arrestin.
+
+> **Note:** The calculated values represent relative coarse-grained PIP2 bead contacts. They should not be interpreted as binding affinities, interaction energies, free energies, atomistic contact numbers, or experimental B-factors.
+
+## Requirements
+
+- Python
+- MDAnalysis
+- NumPy
+- pandas
+
+Install the required packages using:
+
+```bash
+pip install MDAnalysis numpy pandas
+```
