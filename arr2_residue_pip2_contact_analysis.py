@@ -13,8 +13,8 @@ from MDAnalysis.lib.distances import capped_distance
 # Topology / initial structure file
 topology_file = "basal_arr2_0.pdb"
 
-# Molecular dynamics trajectory
-# Examples: trajectory.trr, trajectory.xtc, trajectory.pdb
+# Coarse-grained molecular dynamics trajectory
+# Examples: trajectory.pdb, trajectory.trr, trajectory.xtc
 trajectory_file = "basal_arr2.pdb"
 
 # Output directory
@@ -23,7 +23,7 @@ output_directory = "outputs"
 # Protein region to analyze
 protein_selection = "protein and resid 1-418"
 
-# Martini residue name used for PIP2
+# Residue name used for PIP2 in the coarse-grained system
 lipid_selection = "resname POP6"
 
 # Contact cutoff
@@ -62,14 +62,11 @@ csv_out = os.path.join(
 # =========================================================
 
 if not os.path.exists(topology_file):
-
     raise FileNotFoundError(
         f"Topology file not found:\n{topology_file}"
     )
 
-
 if not os.path.exists(trajectory_file):
-
     raise FileNotFoundError(
         f"Trajectory file not found:\n{trajectory_file}"
     )
@@ -86,7 +83,7 @@ u = mda.Universe(
 
 
 # =========================================================
-# ATOM SELECTIONS
+# ATOM / BEAD SELECTIONS
 # =========================================================
 
 protein = u.select_atoms(
@@ -117,12 +114,12 @@ print(
 )
 
 print(
-    "Total number of atoms:",
+    "Total number of beads:",
     len(u.atoms)
 )
 
 print(
-    "Protein atoms        :",
+    "Protein beads        :",
     len(protein)
 )
 
@@ -132,7 +129,7 @@ print(
 )
 
 print(
-    "PIP2/POP6 atoms      :",
+    "PIP2/POP6 beads      :",
     len(pip2)
 )
 
@@ -147,17 +144,14 @@ print(
 # =========================================================
 
 if len(protein) == 0:
-
     raise ValueError(
-        "Protein selection returned no atoms. "
+        "Protein selection returned no beads. "
         "Check protein_selection."
     )
 
-
 if len(pip2) == 0:
-
     raise ValueError(
-        "PIP2 selection returned no atoms. "
+        "PIP2 selection returned no beads. "
         "Check lipid_selection."
     )
 
@@ -167,7 +161,6 @@ if len(pip2) == 0:
 # =========================================================
 
 residue_contact_sum = {}
-
 residue_frame_count = {}
 
 
@@ -179,7 +172,6 @@ for residue in protein.residues:
     )
 
     residue_contact_sum[key] = 0.0
-
     residue_frame_count[key] = 0
 
 
@@ -198,7 +190,7 @@ n_frames = len(u.trajectory)
 
 for frame_index, ts in enumerate(u.trajectory):
 
-    # PIP2 coordinates for the current frame
+    # PIP2 bead coordinates for the current frame
     pip2_positions = pip2.positions
 
     # Periodic simulation box
@@ -214,38 +206,28 @@ for frame_index, ts in enumerate(u.trajectory):
 
 
         # -------------------------------------------------
-        # Identify residue-PIP2 atom pairs within 6 Angstrom
+        # Identify residue-PIP2 bead pairs within 6 Angstrom
         # -------------------------------------------------
 
         pairs = capped_distance(
-
             residue.atoms.positions,
-
             pip2_positions,
-
             max_cutoff=cutoff_A,
-
             box=box,
-
             return_distances=False
         )
 
 
         # -------------------------------------------------
-        # Number of atom-atom contacts in this frame
+        # Number of coarse-grained bead-bead contacts
+        # in the current frame
         # -------------------------------------------------
 
         contact_count = len(pairs)
 
 
-        residue_contact_sum[
-            key
-        ] += contact_count
-
-
-        residue_frame_count[
-            key
-        ] += 1
+        residue_contact_sum[key] += contact_count
+        residue_frame_count[key] += 1
 
 
     # -----------------------------------------------------
@@ -259,9 +241,7 @@ for frame_index, ts in enumerate(u.trajectory):
     ):
 
         print(
-            f"Frame "
-            f"{frame_index + 1}"
-            f"/{n_frames} processed"
+            f"Frame {frame_index + 1}/{n_frames} processed"
         )
 
 
@@ -277,11 +257,8 @@ for key in residue_contact_sum:
     if residue_frame_count[key] > 0:
 
         residue_mean_contact[key] = (
-
             residue_contact_sum[key]
-
             /
-
             residue_frame_count[key]
         )
 
@@ -303,7 +280,6 @@ values = np.array(
 
 
 vmin = values.min()
-
 vmax = values.max()
 
 
@@ -319,11 +295,8 @@ for key, value in residue_mean_contact.items():
     else:
 
         residue_norm_score[key] = (
-
             (value - vmin)
-
             /
-
             (vmax - vmin)
         )
 
@@ -331,7 +304,6 @@ for key, value in residue_mean_contact.items():
 print("\n" + "=" * 70)
 print("NORMALIZATION")
 print("=" * 70)
-
 
 print(
     "Minimum mean contact :",
@@ -362,24 +334,24 @@ for key in residue_mean_contact:
 
     resid, resname = key
 
+    rows.append(
+        {
+            "Resid":
+                resid,
 
-    rows.append({
+            "Resname":
+                resname,
 
-        "Resid":
-            resid,
+            "Mean_bead_contacts_with_PIP2":
+                residue_mean_contact[key],
 
-        "Resname":
-            resname,
+            "Normalized_contact_0_1":
+                residue_norm_score[key],
 
-        "Mean_atom_contacts_with_PIP2":
-            residue_mean_contact[key],
-
-        "Normalized_contact_0_1":
-            residue_norm_score[key],
-
-        "Frame_count":
-            residue_frame_count[key]
-    })
+            "Frame_count":
+                residue_frame_count[key]
+        }
+    )
 
 
 df = pd.DataFrame(
@@ -414,14 +386,11 @@ with open(
     "w"
 ) as fout:
 
-
     for line in fin:
-
 
         if line.startswith(
             ("ATOM  ", "HETATM")
         ):
-
 
             # ---------------------------------------------
             # Read residue information from PDB
@@ -456,7 +425,7 @@ with open(
             # ---------------------------------------------
             # Get normalized PIP2 contact score
             #
-            # Non-protein / non-analyzed residues = 0
+            # Non-analyzed residues receive 0
             # ---------------------------------------------
 
             score = (
@@ -487,13 +456,9 @@ with open(
             # ---------------------------------------------
 
             new_line = (
-
                 line_no_newline[:60]
-
                 + f"{score:6.2f}"
-
                 + line_no_newline[66:]
-
                 + "\n"
             )
 
@@ -501,7 +466,6 @@ with open(
             fout.write(
                 new_line
             )
-
 
         else:
 
@@ -529,29 +493,24 @@ print("=" * 70)
 
 
 top20 = (
-
     df
-
     .sort_values(
-        "Mean_atom_contacts_with_PIP2",
+        "Mean_bead_contacts_with_PIP2",
         ascending=False
     )
-
     .head(20)
 )
 
 
 print(
-
     top20[
         [
             "Resid",
             "Resname",
-            "Mean_atom_contacts_with_PIP2",
+            "Mean_bead_contacts_with_PIP2",
             "Normalized_contact_0_1"
         ]
     ]
-
     .to_string(
         index=False
     )
@@ -566,7 +525,6 @@ print("\n" + "=" * 70)
 print("VMD VISUALIZATION")
 print("=" * 70)
 
-
 print(
     "\nLoad the generated PDB file:"
 )
@@ -574,7 +532,6 @@ print(
 print(
     pdb_out
 )
-
 
 print(
     "\nGraphics -> Representations"
@@ -592,7 +549,6 @@ print(
     "Coloring Method : Beta"
 )
 
-
 print(
     "\nNormalized PIP2 contact values "
     "range from 0 to 1."
@@ -604,6 +560,11 @@ print(
 
 print(
     "1 = highest relative PIP2 contact value"
+)
+
+print(
+    "\nThe values stored in the PDB B-factor field "
+    "are normalized contact scores used for visualization."
 )
 
 
